@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag_secret_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-ragapp}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PUBLISH_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        PYTHON_IMAGE: ${DOCKER_PYTHON_IMAGE:-python:3.12-slim-bookworm}
+        DEBIAN_REPO_MIRROR: ${DEBIAN_REPO_MIRROR:-http://deb.debian.org}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:-rag_secret_change_me}@db:5432/${POSTGRES_DB:-ragapp}
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: "8000"
+      CORS_ALLOW_ORIGINS: ${DOCKER_CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      ZHIPUAI_API_KEY: ${ZHIPUAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_BASE: ${OPENAI_API_BASE:-https://open.bigmodel.cn/api/paas/v4}
+      CHAT_MODEL_NAME: ${CHAT_MODEL_NAME:-glm-4.5-air}
+      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-embedding-2}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-docker}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+    volumes:
+      - chroma_data:/workspace/backend/chroma_db
+    ports:
+      - "${BACKEND_PUBLISH_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    ports:
+      - "${FRONTEND_PUBLISH_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  chroma_data:

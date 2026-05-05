@@ -1,0 +1,160 @@
+/* 全局科技感主题 — 配合 Element Plus dark/css-vars */
+
+:root.dark {
+  color-scheme: dark;
+
+  --tech-font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+  --tech-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --tech-bg-void: #070b12;
+  --tech-bg-deep: #0c1220;
+  --tech-accent: #22d3ee;
+  --tech-accent-soft: rgba(34, 211, 238, 0.14);
+  --tech-violet: #a78bfa;
+  --tech-violet-soft: rgba(167, 139, 250, 0.12);
+  --tech-border: rgba(148, 163, 184, 0.14);
+  --tech-border-strong: rgba(34, 211, 238, 0.35);
+  --tech-text: #e2e8f0;
+  --tech-muted: #94a3b8;
+
+  --el-color-primary: #06b6d4;
+  --el-color-primary-light-3: #22d3ee;
+  --el-color-primary-light-5: #67e8f9;
+  --el-color-primary-dark-2: #0891b2;
+}
+
+html.dark,
+html.dark body {
+  font-family: var(--tech-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+html.dark body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--tech-bg-void);
+  color: var(--tech-text);
+}
+
+.tech-bg {
+  position: relative;
+  background-color: var(--tech-bg-deep);
+  background-image:
+    radial-gradient(ellipse 100% 70% at 50% -25%, rgba(34, 211, 238, 0.14), transparent 55%),
+    radial-gradient(ellipse 60% 45% at 100% 30%, rgba(167, 139, 250, 0.1), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 0% 80%, rgba(6, 182, 212, 0.06), transparent 45%),
+    linear-gradient(rgba(56, 189, 248, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 56px 56px, 56px 56px;
+}
+
+.tech-bg::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 20% 50%, transparent 0%, rgba(7, 11, 18, 0.55) 100%);
+  z-index: 0;
+}
+
+.tech-bg > * {
+  position: relative;
+  z-index: 1;
+}
+
+html.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 4px;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.35), rgba(167, 139, 250, 0.25));
+  border-radius: 4px;
+}
+
+html.dark ::selection {
+  background: rgba(34, 211, 238, 0.35);
+  color: #fff;
+}
+
+/* Teleported Element Plus 对话框（自定义 class tech-dialog） */
+html.dark .tech-dialog.el-dialog {
+  background: linear-gradient(165deg, rgba(30, 41, 59, 0.97), rgba(15, 23, 42, 0.99));
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 28px 72px rgba(0, 0, 0, 0.65),
+    0 0 100px rgba(34, 211, 238, 0.06);
+}
+
+html.dark .tech-dialog .el-dialog__header {
+  padding-bottom: 12px;
+  margin-right: 0;
+}
+
+html.dark .tech-dialog .el-dialog__title {
+  font-family: var(--tech-font-sans);
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--tech-text);
+}
+
+html.dark .tech-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: var(--tech-muted);
+}
+
+html.dark .tech-dialog .el-dialog__body {
+  color: var(--tech-muted);
+}
+
+html.dark .tech-dialog .evaluation-score {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+html.dark .tech-dialog .score-item {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+html.dark .tech-dialog .score-label {
+  font-family: var(--tech-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tech-accent);
+  margin-bottom: 8px;
+}
+
+html.dark .tech-dialog .evaluation-interpretation {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+html.dark .tech-dialog .evaluation-interpretation h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--tech-text);
+}
+
+html.dark .tech-dialog .evaluation-interpretation p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--tech-muted);
+}
+
+html.dark .tech-dialog .el-button {
+  border-radius: 10px;
+}
