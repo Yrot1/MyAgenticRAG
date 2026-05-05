@@ -1,16 +1,19 @@
 # RAG Vue FastAPI
 
-一个基于 Vue 3 + FastAPI 的个人知识库问答项目，支持文档上传、向量检索、流式聊天、Agentic RAG 推理过程展示和回答质量评估。
+一个面向个人知识库场景的 RAG 问答系统，前端使用 Vue 3 + Element Plus 构建深色科技风聊天界面，后端使用 FastAPI 提供认证、文档入库、向量检索、流式问答、Agentic RAG 和回答质量评估能力。项目集成 PostgreSQL、ChromaDB、LangChain、Embedding 模型、智谱 GLM / OpenAI-compatible API 与 RAGAS，可用于演示完整的“文档上传 -> 向量化入库 -> 检索增强生成 -> 质量评估”流程。
 
 ## 功能特性
 
-- 知识库问答：基于上传文档进行 RAG 检索增强回答
-- Agent 模式：支持多轮检索、任务规划和自检式回答
-- 文档上传：支持 PDF、Word、CSV、Excel、Markdown、TXT
-- 会话管理：前端支持新建、切换、重命名、删除会话
-- 参考资料展示：可查看每次回答检索到的上下文
-- 回答评估：支持对回答质量进行 RAGAS 评估
-- 深色科技风 UI：Vue 3 + Element Plus + Vite
+- 多格式文档入库：支持 PDF、Word、CSV、Excel、Markdown、TXT 等文件上传，自动完成文本解析、切分、Embedding 生成和 ChromaDB 向量索引写入。
+- 检索增强问答：基于 LangChain + ChromaDB 从个人知识库中召回相关片段，并将上下文注入大模型生成回答，降低纯模型幻觉。
+- 流式聊天体验：普通 RAG 问答路径使用 SSE `text/event-stream` 返回模型增量内容，前端通过 `ReadableStream` 边接收边渲染。
+- Agentic RAG 模式：支持任务规划、多轮检索、回答生成、质量自检和工具调用记录展示，用于观察一次复杂问答的执行过程。
+- 参考资料追溯：每次回答可展开查看检索到的上下文片段，方便判断答案是否来自知识库内容。
+- 回答质量评估：集成 RAGAS，对回答的忠实度、相关性和综合质量进行评分，也包含 Agent 内部的检索质量与答案质量评估。
+- 用户与会话管理：支持注册登录、JWT 鉴权、会话新建/切换/重命名/删除，历史消息和文件记录持久化到 PostgreSQL。
+- 工程化部署：提供本地开发脚本、Dockerfile、Docker Compose 和 Nginx 反向代理配置，可一键启动前端、后端、PostgreSQL 与向量库持久化环境。
+- 深色科技风 UI：基于 Vue 3、Element Plus、Vite 和 Axios 实现聊天、上传、评估面板、思考过程面板与响应式交互。
+
 
 ## 项目结构
 
@@ -185,21 +188,18 @@ http://127.0.0.1:8000/api/health
 - `POST /api/evaluate`：评估回答质量
 - `GET /api/health`：健康检查
 
-## Git 提交注意
-
-不要提交以下内容：
-
-- `.env`、真实 API Key 或任何密钥
-- `frontend/node_modules/`
-- `frontend/dist/`
-- `backend/chroma_db/`
-- 上传文件、向量库、缓存、日志文件
-
-这些内容已写入 `.gitignore`。上传 GitHub 前建议再检查一次是否存在真实密钥。
 
 ## 技术栈
 
-- 前端：Vue 3、Element Plus、Vite
-- 后端：FastAPI、Uvicorn
-- RAG：LangChain、ChromaDB
-- 模型：智谱 GLM / OpenAI-compatible API
+- 前端工程：Vue 3、Vite 5、Element Plus、Axios，用于构建知识库聊天界面、会话管理、文件上传、参考资料展示和回答评估面板。
+- 后端服务：FastAPI、Uvicorn、Pydantic / Pydantic Settings、python-dotenv，提供认证、会话、聊天、上传、检索、评估和健康检查等 REST API。
+- 数据库与持久化：PostgreSQL 16、SQLAlchemy 2、psycopg 3，保存用户、会话、消息、文件入库记录等业务数据；Docker Compose 中通过 `postgres_data` 持久化。
+- 向量数据库：ChromaDB、langchain-chroma，用于存储文档切分后的向量索引；本地路径为 `backend/chroma_db`，Docker Compose 中通过 `chroma_data` 持久化。
+- RAG 编排：LangChain、langchain-core、langchain-community、langchain-text-splitters，负责文档加载、文本切分、向量检索、上下文拼接和检索增强问答。
+- Embedding：OpenAI-compatible Embeddings / 智谱 `embedding-2`，通过 `EMBEDDING_MODEL_NAME` 配置，和 ChromaDB 配合完成语义检索。
+- 大模型接入：智谱 GLM / OpenAI-compatible API、langchain-openai、zhipuai，默认使用 `glm-4.5-air`，也可以通过 `OPENAI_API_BASE`、`CHAT_MODEL_NAME` 切换兼容接口和模型。
+- Agentic RAG：规划 Agent、检索 Agent、回答 Agent、评估 Agent，支持任务拆解、多轮检索、工具调用记录、思考过程展示和答案质量自检。
+- 回答质量评估：RAGAS、datasets，基于 `faithfulness`、`answer_relevancy` 和综合评分评估回答是否忠实于检索上下文、是否切题。
+- 流式交互：FastAPI `StreamingResponse`、SSE `text/event-stream`、前端 Fetch `ReadableStream`，普通 RAG 路径支持模型增量输出；Agent 路径返回答案分块、思考过程、工具调用和评估元数据。
+- 认证与安全：JWT、PyJWT、bcrypt，支持用户注册登录、Token 鉴权和密码哈希存储。
+- 部署与反向代理：Docker Compose、Nginx、Dockerfile，组合前端静态站点、后端 API、PostgreSQL 和 Chroma 持久化存储。
