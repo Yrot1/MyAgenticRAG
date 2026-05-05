@@ -1,4 +1,4 @@
-# RAG Vue FastAPI
+# AgenticRAG Vue FastAPI
 
 一个面向个人知识库场景的 RAG 问答系统，前端使用 Vue 3 + Element Plus 构建深色科技风聊天界面，后端使用 FastAPI 提供认证、文档入库、向量检索、流式问答、Agentic RAG 和回答质量评估能力。项目集成 PostgreSQL、ChromaDB、LangChain、Embedding 模型、智谱 GLM / OpenAI-compatible API 与 RAGAS，可用于演示完整的“文档上传 -> 向量化入库 -> 检索增强生成 -> 质量评估”流程。
 
