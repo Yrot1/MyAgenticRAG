@@ -1,12 +1,12 @@
-# RAG Vue FastAPI
+# AgenticRAG Vue FastAPI
 
 ## About
 
-一个面向个人知识库场景的 RAG 问答系统，前端使用 Vue 3 + Element Plus 构建深色科技风聊天界面，后端使用 FastAPI 提供认证、文档入库、向量检索、流式问答、Agentic RAG 和回答质量评估能力。项目集成 PostgreSQL、ChromaDB、可选 **Redis**（Agent 会话共享与检索短期缓存）、LangChain、Embedding 模型、智谱 GLM / OpenAI-compatible API 与 RAGAS，可用于演示完整的“文档上传 -> 向量化入库 -> 检索增强生成 -> 质量评估”流程。
+以**售后 / 客服知识库问答**为典型场景的智能 RAG 演示：前端使用 Vue 3 + Element Plus 构建深色科技风聊天界面，后端使用 FastAPI 提供认证、文档入库、向量检索、流式问答、Agentic RAG 和回答质量评估。项目集成 PostgreSQL、ChromaDB、可选 **Redis**（Agent 会话共享与检索短期缓存）、LangChain、Embedding 模型、智谱 GLM / OpenAI-compatible API 与 RAGAS。仓库在 `backend/RAG/data` 附带 **星河科技 Nova 耳机 X1** 示例语料（用户手册、常见故障 FAQ、退换货政策、内部客服话术等），也可上传自有文档扩展为任意领域知识库，用于完整演示「文档入库 → 向量化检索 → 增强生成 → 质量评估」流程。
 
 ## 功能特性
 
-- 文档入库：PDF / Word / 表格 / Markdown / TXT，解析切分后写入 Chroma 向量库。
+- 文档入库：PDF / Word / 表格 / Markdown / TXT，解析切分后写入 Chroma；`backend/RAG/data` 提供上述售后演示 Markdown，可与自上传文档并存。
 - RAG 问答：向量召回 + 上下文注入生成。
 - 流式输出：SSE，前端边收边渲染。
 - Agent 模式：任务规划、多轮检索、回答与自检，可展示思考过程与工具调用。
