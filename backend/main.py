@@ -18,11 +18,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from RAG.rag import RagService
 from RAG.knowledge_base import KnowledgeBaseService
 from RAG.ragas_evaluator import RagasEvaluator
+from RAG.retrieval_service import RetrievalService
+from RAG.sample_loader import load_samples_for_user, list_sample_files
 from RAG import config_data as config
 from agent.agent_controller import AgentController
 from database import get_db, init_db
 from models import Conversation, KnowledgeFile, Message, User
 from security import create_access_token, get_current_user, get_password_hash, verify_password
+from redis_store import redis_ping
 
 app = FastAPI(title="Agentic RAG Chat API", version="2.0.0")
 
@@ -37,10 +40,11 @@ app.add_middleware(
 rag_service = RagService()
 kb_service = KnowledgeBaseService()
 ragas_evaluator = RagasEvaluator()
-agent_controller = AgentController(rag_service=rag_service)  # 与全局 RagService 共用检索
-
-# 缓存最近一次检索的上下文（按 session_id）
-context_cache = {}
+retrieval_service = RetrievalService(rag_service)
+agent_controller = AgentController(
+    rag_service=rag_service,
+    ragas_evaluator=ragas_evaluator,
+)
 
 
 @app.on_event("startup")
@@ -322,32 +326,22 @@ async def chat(request: ChatRequest, current_user: User = Depends(get_current_us
         raise HTTPException(status_code=500, detail=str(e))
 
 async def chat_traditional(request: ChatRequest, metadata_filter: Optional[dict] = None):
-    """传统 RAG 聊天"""
+    """传统 RAG 聊天（统一检索：HyDE + Rerank，无子任务分解）"""
     import traceback
     try:
-        session_config = {
-            "configurable": {
-                "session_id": request.session_id
-            }
-        }
-        
-        # 先执行检索，获取当前用户的上下文
-        retriever = rag_service.vector_service.get_retriever(metadata_filter=metadata_filter)
-        retrieved_docs = retriever.invoke(request.message)
-        contexts = [doc.page_content for doc in retrieved_docs]
-        
-        # 缓存检索到的上下文
-        context_cache[request.session_id] = contexts
-        
-        # 打印调试信息
-        print(f"\n=== 检索到的上下文 ===")
+        retrieval = retrieval_service.retrieve(
+            request.message,
+            metadata_filter=metadata_filter,
+            subtasks=None,
+        )
+        contexts = retrieval.get("contexts", [])
+
+        print(f"\n=== 快速模式检索 ===")
         print(f"问题：{request.message}")
-        print(f"检索到上下文数量：{len(contexts)}")
-        print(f"RAG 服务缓存的文档数量：{len(rag_service.last_retrieved_docs)}")
-        for i, ctx in enumerate(contexts):
-            print(f"上下文{i+1}: {ctx[:100]}...")
+        print(f"查询：{retrieval.get('queries_used', [])}")
+        print(f"上下文数量：{len(contexts)}")
         print(f"====================\n")
-        
+
         context_text = "\n\n".join([f"文档片段：{ctx}" for ctx in contexts]) or "无相关参考资料"
         history_text = "\n".join([
             f"{item.get('role', '')}: {item.get('content', '')}"
@@ -356,8 +350,8 @@ async def chat_traditional(request: ChatRequest, metadata_filter: Optional[dict]
         messages = [
             (
                 "system",
-                "以提供的参考资料为主，简洁、专业地回答用户问题。"
-                "如果参考资料不足，可以说明资料不足并给出通用回答。\n\n"
+                "你是星河科技 Nova 耳机 X1 售后助手。以提供的参考资料为主，简洁专业地回答；"
+                "须注明依据来源；资料不足时明确说明。\n\n"
                 f"参考资料：\n{context_text}\n\n对话历史：\n{history_text}",
             ),
             ("user", request.message),
@@ -394,50 +388,56 @@ async def chat_traditional(request: ChatRequest, metadata_filter: Optional[dict]
         raise HTTPException(status_code=500, detail=str(e))
 
 async def chat_with_agent(request: ChatRequest, metadata_filter: Optional[dict] = None):
-    """Agentic RAG 聊天"""
+    """Agentic RAG：真 token 流式 + 思考过程 SSE"""
     import traceback
     try:
-        # 使用 Agent 控制器执行，传入 session_id 和 history
-        result = agent_controller.execute(
-            question=request.message,
-            session_id=request.session_id,
-            history=request.history,
-            metadata_filter=metadata_filter,
-        )
-        
-        # 流式输出答案
         async def generate():
             try:
-                # 发送答案
-                answer = result["answer"]
-                for i in range(0, len(answer), 10):
-                    chunk = answer[i:i+10]
-                    yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
-                
-                # 发送完整元数据（包含思考过程和工具调用）
-                yield f"data: {json.dumps({
-                    'contexts': result['contexts'],
-                    'thinking_process': result['thinking_process'],
-                    'tools_called': result['tools_called'],
-                    'metadata': result['metadata'],
-                    'evaluation': result['evaluation'],
-                    'conversation_history': result.get('conversation_history', [])
-                }, ensure_ascii=False)}\n\n"
-                
-                # 发送结束信号
+                final_payload = None
+                for event in agent_controller.execute_stream(
+                    question=request.message,
+                    session_id=request.session_id,
+                    history=request.history,
+                    metadata_filter=metadata_filter,
+                ):
+                    etype = event.get("type")
+                    if etype == "thinking":
+                        yield f"data: {json.dumps({
+                            'thinking_process': event.get('thinking_process', []),
+                        }, ensure_ascii=False)}\n\n"
+                    elif etype == "content":
+                        yield f"data: {json.dumps({'content': event.get('content', '')}, ensure_ascii=False)}\n\n"
+                    elif etype == "content_replace":
+                        yield f"data: {json.dumps({
+                            'content_replace': event.get('content', ''),
+                        }, ensure_ascii=False)}\n\n"
+                    elif etype == "final":
+                        final_payload = event.get("payload", {})
+
+                if final_payload:
+                    yield f"data: {json.dumps({
+                        'contexts': final_payload.get('contexts', []),
+                        'thinking_process': final_payload.get('thinking_process', []),
+                        'tools_called': final_payload.get('tools_called', []),
+                        'metadata': {
+                            **(final_payload.get('metadata') or {}),
+                            'evaluation': final_payload.get('evaluation'),
+                        },
+                        'evaluation': final_payload.get('evaluation'),
+                    }, ensure_ascii=False)}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
                 error_trace = traceback.format_exc()
                 print(f"Agent 流式输出错误：{error_trace}")
                 yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
-        
+
         return StreamingResponse(
             generate(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
-            }
+            },
         )
     except Exception as e:
         error_trace = traceback.format_exc()
@@ -568,6 +568,45 @@ async def list_kb_files_nested(
     return await _kb_list_files_impl(current_user, db)
 
 
+@app.post("/api/knowledge/load-samples")
+async def load_sample_knowledge(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """导入 backend/RAG/data 星河科技演示语料到当前用户知识库"""
+    result = load_samples_for_user(current_user.id, kb_service)
+    for item in result.get("loaded", []):
+        filename = item.get("filename", "")
+        if not filename:
+            continue
+        file_hash = hashlib.md5(filename.encode("utf-8")).hexdigest()
+        row = (
+            db.query(KnowledgeFile)
+            .filter(
+                KnowledgeFile.user_id == current_user.id,
+                KnowledgeFile.filename == filename,
+            )
+            .first()
+        )
+        if not row:
+            row = KnowledgeFile(
+                user_id=current_user.id,
+                filename=filename,
+                file_hash=file_hash,
+                chunks=item.get("chunks", 0),
+                status="success",
+                last_ingested=datetime.utcnow(),
+            )
+            db.add(row)
+        else:
+            row.chunks = item.get("chunks", row.chunks)
+            row.status = "success"
+            row.last_ingested = datetime.utcnow()
+    db.commit()
+    result["available_samples"] = [os.path.basename(p) for p in list_sample_files()]
+    return result
+
+
 @app.delete("/api/files/{file_id}")
 async def delete_kb_file(
     file_id: int,
@@ -656,14 +695,33 @@ async def evaluate_answer(request: EvaluateRequest, current_user: User = Depends
 
 @app.get("/api/health")
 async def health_check():
+    redis_configured = bool(getattr(config, "redis_url", ""))
     return {
         "status": "healthy",
-        "version": "2.0.0",
+        "version": "2.1.0",
+        "scene": "xinghe_nova_after_sales",
         "model": config.chat_model_name,
         "embedding_model": config.embedding_model_name,
         "api_key_configured": bool(config.llm_api_key),
         "database_configured": bool(config.database_url),
         "cors_allow_origins": config.cors_allow_origins,
+        "redis_configured": redis_configured,
+        "redis_ping_ok": redis_ping() if redis_configured else None,
+        "redis_retrieval_cache_enabled": getattr(
+            config, "redis_retrieval_cache_enabled", False
+        ),
+        "features": {
+            "multi_query_retrieve": True,
+            "parallel_retrieval": getattr(config, "use_parallel_retrieval", True),
+            "hyde": getattr(config, "use_hyde", True),
+            "rerank": getattr(config, "use_rerank", True),
+            "ragas_in_agent": getattr(config, "use_ragas_in_agent", True),
+            "agent_retrieval_eval": getattr(config, "use_agent_retrieval_eval", False),
+            "agent_answer_eval": getattr(config, "use_agent_answer_eval", False),
+            "llm_subtask_query": getattr(config, "use_llm_subtask_query", False),
+            "agent_streaming": True,
+        },
+        "sample_data_files": [os.path.basename(p) for p in list_sample_files()],
     }
 
 if __name__ == "__main__":

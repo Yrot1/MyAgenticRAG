@@ -1,16 +1,21 @@
 # RAG Vue FastAPI
 
-一个基于 Vue 3 + FastAPI 的个人知识库问答项目，支持文档上传、向量检索、流式聊天、Agentic RAG 推理过程展示和回答质量评估。
+## About
+
+一个面向个人知识库场景的 RAG 问答系统，前端使用 Vue 3 + Element Plus 构建深色科技风聊天界面，后端使用 FastAPI 提供认证、文档入库、向量检索、流式问答、Agentic RAG 和回答质量评估能力。项目集成 PostgreSQL、ChromaDB、可选 **Redis**（Agent 会话共享与检索短期缓存）、LangChain、Embedding 模型、智谱 GLM / OpenAI-compatible API 与 RAGAS，可用于演示完整的“文档上传 -> 向量化入库 -> 检索增强生成 -> 质量评估”流程。
 
 ## 功能特性
 
-- 知识库问答：基于上传文档进行 RAG 检索增强回答
-- Agent 模式：支持多轮检索、任务规划和自检式回答
-- 文档上传：支持 PDF、Word、CSV、Excel、Markdown、TXT
-- 会话管理：前端支持新建、切换、重命名、删除会话
-- 参考资料展示：可查看每次回答检索到的上下文
-- 回答评估：支持对回答质量进行 RAGAS 评估
-- 深色科技风 UI：Vue 3 + Element Plus + Vite
+- 文档入库：PDF / Word / 表格 / Markdown / TXT，解析切分后写入 Chroma 向量库。
+- RAG 问答：向量召回 + 上下文注入生成。
+- 流式输出：SSE，前端边收边渲染。
+- Agent 模式：任务规划、多轮检索、回答与自检，可展示思考过程与工具调用。
+- Redis（可选）：配 `REDIS_URL` 后，Agent 服务端会话可多实例共享；普通 RAG 与 Agent 共用检索缓存（默认约 120s），减轻向量库与重排压力。不配则 Agent 会话仅存进程内、无检索缓存。
+- 参考资料：回答可展开检索片段。
+- 质量评估：RAGAS；Agent 内可选检索/答案评估。
+- 用户与会话：注册登录、JWT；会话管理；消息与文件记录存 PostgreSQL。
+- 部署：本地脚本、Docker / Compose、Nginx 示例。
+- UI：Vue 3 + Element Plus 深色科技风。
 
 ## 项目结构
 
@@ -59,6 +64,8 @@ JWT_SECRET_KEY=replace_with_a_long_random_secret
 JWT_ALGORITHM=HS256
 JWT_EXPIRE_MINUTES=1440
 ```
+
+**Redis（可选）**：在本机或服务器上启动 Redis 后，在 `.env` 中配置 `REDIS_URL`（示例见 `.env.example`）。常用变量：`REDIS_KEY_PREFIX`、`REDIS_CONVERSATION_TTL_SECONDS`（会话历史 TTL，默认 7 天）、`RETRIEVAL_CACHE_TTL_SECONDS`、`RETRIEVAL_CACHE_ENABLED`（有 `REDIS_URL` 时默认开启检索缓存）、`REDIS_MAX_CONNECTIONS`。当前 Compose 栈未内置 Redis 服务，生产或多副本部署时需自行接入实例。
 
 `DATABASE_URL` 里的用户名、密码和数据库名需要与你本机 PostgreSQL 保持一致。后端启动时会自动创建项目需要的业务表。
 
@@ -170,7 +177,7 @@ python backend/main.py
 http://127.0.0.1:8000/api/health
 ```
 
-正常会返回服务状态、模型名、Embedding 模型名、CORS 配置，以及 `api_key_configured` 是否为 `true`。如果它是 `false`，说明 `.env` 没有正确配置模型 Key。
+正常会返回服务状态、模型名、Embedding 模型名、CORS 配置，以及 `api_key_configured` 是否为 `true`。如果它是 `false`，说明 `.env` 没有正确配置模型 Key。若配置了 Redis，还会返回 `redis_configured`、`redis_ping_ok`、`redis_retrieval_cache_enabled`，便于确认连接与检索缓存开关。
 
 ## API 接口
 
@@ -183,7 +190,7 @@ http://127.0.0.1:8000/api/health
 - `POST /api/upload`：上传文件到知识库
 - `GET /api/files`：查看已入库文件
 - `POST /api/evaluate`：评估回答质量
-- `GET /api/health`：健康检查
+- `GET /api/health`：健康检查（含 Redis 连接与检索缓存开关字段，未配置 Redis 时相应字段为 false 或 null）
 
 ## Git 提交注意
 
@@ -199,7 +206,12 @@ http://127.0.0.1:8000/api/health
 
 ## 技术栈
 
-- 前端：Vue 3、Element Plus、Vite
-- 后端：FastAPI、Uvicorn
-- RAG：LangChain、ChromaDB
-- 模型：智谱 GLM / OpenAI-compatible API
+- 前端：Vue 3、Vite、Element Plus、Axios。
+- 后端：FastAPI、Uvicorn、Pydantic、python-dotenv。
+- 数据：PostgreSQL、SQLAlchemy、psycopg；ChromaDB、langchain-chroma（向量库目录 `backend/chroma_db`）。
+- 缓存（可选）：Redis、redis-py。
+- RAG / LLM：LangChain 全家桶、OpenAI 兼容 Embeddings 与 Chat（智谱 GLM / zhipuai、`langchain-openai`）。
+- Agent：规划 / 检索 / 回答 / 评估流水线；SSE 流式。
+- 评估：RAGAS、datasets。
+- 认证：JWT、bcrypt。
+- 部署：Docker、Compose、Nginx。

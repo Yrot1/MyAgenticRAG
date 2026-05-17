@@ -7,6 +7,15 @@
           <span class="section-title">已入库文件</span>
         </div>
         <el-button
+          type="success"
+          plain
+          size="small"
+          :loading="samplesLoading"
+          @click="loadSamples"
+        >
+          导入演示语料
+        </el-button>
+        <el-button
           type="primary"
           plain
           size="small"
@@ -26,7 +35,7 @@
         <template v-else-if="files.length === 0">
           <el-empty :image-size="72">
             <template #description>
-              <span class="empty-hint">暂无文档入向量库<br />上传 PDF / Word / 表格 / 文本后，将在此列出；同名内容若已存在会自动跳过</span>
+              <span class="empty-hint">星河科技 Nova X1 售后演示库<br />点击「导入演示语料」一键载入手册/政策/FAQ，或自行上传文档</span>
             </template>
           </el-empty>
         </template>
@@ -104,6 +113,7 @@ const uploadResult = ref(null)
 const files = ref([])
 const stats = ref({ total_files: 0, total_chunks: 0 })
 const filesLoading = ref(false)
+const samplesLoading = ref(false)
 const deletingFileId = ref(null)
 
 const acceptTypes = '.pdf,.doc,.docx,.csv,.xlsx,.xls,.md,.txt'
@@ -144,7 +154,23 @@ const refreshFiles = async () => {
   }
 }
 
-defineExpose({ refreshFiles })
+const loadSamples = async () => {
+  samplesLoading.value = true
+  try {
+    const { data } = await axios.post(apiUrl('/api/knowledge/load-samples'), {}, {
+      headers: authHeaders()
+    })
+    ElMessage.success(data.message || '演示语料导入完成')
+    await refreshFiles()
+  } catch (error) {
+    const detail = error.response?.data?.detail
+    ElMessage.error(typeof detail === 'string' ? detail : '导入演示语料失败')
+  } finally {
+    samplesLoading.value = false
+  }
+}
+
+defineExpose({ refreshFiles, loadSamples })
 
 onMounted(() => {
   refreshFiles()

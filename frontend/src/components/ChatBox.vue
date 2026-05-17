@@ -6,9 +6,19 @@
           <div class="empty-orbit" />
           <div class="empty-core" />
         </div>
-        <p class="empty-kicker">Agentic RAG</p>
-        <h2 class="empty-title">知识库推理就绪</h2>
-        <p class="empty-desc">侧栏管理会话，右上角维护知识库。开启下方 Agent 模式可进行多轮检索与自检。</p>
+        <p class="empty-kicker">星河科技 · Nova X1</p>
+        <h2 class="empty-title">售后知识助手</h2>
+        <p class="empty-desc">请先在知识库面板「导入演示语料」或上传手册/政策文档。可尝试：红灯闪三下、进水保修、七天无理由退换。</p>
+        <div class="empty-examples">
+          <el-button
+            v-for="q in sampleQuestions"
+            :key="q"
+            size="small"
+            round
+            class="sample-q-btn"
+            @click="askSample(q)"
+          >{{ q }}</el-button>
+        </div>
       </div>
       <!-- 消息列表 -->
       <div
@@ -159,6 +169,12 @@
                 <el-icon><CircleClose /></el-icon>
               </el-button>
             </div>
+            <div
+              v-if="message.thinkingTimeMs != null"
+              class="thinking-time-footer"
+            >
+              思考用时 {{ formatThinkingDuration(message.thinkingTimeMs) }}
+            </div>
           </div>
         </template>
       </div>
@@ -168,13 +184,22 @@
         <div class="message-avatar">
           <el-avatar :src="assistantAvatar" class="bubble-avatar" />
         </div>
-        <div class="message-content assistant-content">
-          <div class="thinking-animation">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
+        <div class="message-content assistant-content assistant-loading">
+          <div v-if="streamThinking.length" class="stream-thinking">
+            <div v-for="(step, si) in streamThinking.slice(-3)" :key="si" class="stream-thinking-step">{{ step.message }}</div>
           </div>
-          <div class="thinking-text">正在思考中...</div>
+          <div v-if="streamingContent" class="message-text stream-preview">{{ streamingContent }}</div>
+          <template v-else>
+            <div class="thinking-animation">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+            <div class="thinking-text">{{ useAgentMode ? 'Agent 多路检索与生成中…' : '正在检索并生成…' }}</div>
+          </template>
+          <div class="thinking-time-active">
+            思考中 · {{ formatThinkingDuration(thinkingElapsedMs) }}
+          </div>
         </div>
       </div>
     </div>
@@ -195,8 +220,8 @@
         />
         <el-tooltip placement="top">
           <template #content>
-            Agent 模式：多轮检索 + 自我评估，答案更准确<br/>
-            普通模式：快速检索回答
+            Agent：并行多路检索（可关评估加速）<br/>
+            快速：检索后流式回答
           </template>
           <el-icon class="help-icon"><QuestionFilled /></el-icon>
         </el-tooltip>
@@ -254,7 +279,7 @@
 </template>
 
 <script setup>
-import { ref, nextTick, watch } from 'vue'
+import { ref, nextTick, watch, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox, ElDialog } from 'element-plus'
 import { User, ChatDotRound, Promotion, Delete, CopyDocument, Refresh, CircleCheck, CircleClose, DataAnalysis, ArrowUp, ArrowDown, QuestionFilled } from '@element-plus/icons-vue'
 import { conversationStore } from '../utils/conversationStore'
@@ -277,9 +302,77 @@ const messages = ref([])
 const inputMessage = ref('')
 const loading = ref(false)
 const streamingContent = ref('')
+const streamThinking = ref([])
+const sampleQuestions = [
+  '红灯闪三下是什么意思？',
+  '耳机进水了还能保修吗？',
+  '七天无理由退换需要什么条件？'
+]
 const chatContainer = ref(null)
 const lastUserMessage = ref('')
 const useAgentMode = ref(false)  // Agent 模式开关
+
+const thinkingElapsedMs = ref(0)
+let thinkingTimerId = null
+let thinkingStartedAt = 0
+
+const formatThinkingDuration = (ms) => {
+  const n = Number(ms) || 0
+  if (n < 1000) return `${(n / 1000).toFixed(2)}s`
+  const sec = n / 1000
+  if (sec < 60) return `${sec.toFixed(2)}s`
+  const m = Math.floor(sec / 60)
+  const s = (sec % 60).toFixed(1)
+  return `${m}分${s}秒`
+}
+
+const startThinkingTimer = () => {
+  clearThinkingTimer()
+  thinkingStartedAt = performance.now()
+  thinkingElapsedMs.value = 0
+  thinkingTimerId = setInterval(() => {
+    thinkingElapsedMs.value = Math.floor(performance.now() - thinkingStartedAt)
+  }, 50)
+}
+
+const captureThinkingTimeMs = () => {
+  if (thinkingTimerId) {
+    clearInterval(thinkingTimerId)
+    thinkingTimerId = null
+  }
+  if (thinkingStartedAt) {
+    thinkingElapsedMs.value = Math.floor(performance.now() - thinkingStartedAt)
+  }
+  return thinkingElapsedMs.value
+}
+
+const clearThinkingTimer = () => {
+  if (thinkingTimerId) {
+    clearInterval(thinkingTimerId)
+    thinkingTimerId = null
+  }
+  thinkingStartedAt = 0
+  thinkingElapsedMs.value = 0
+}
+
+const buildAssistantMessage = (streamState, thinkingTimeMs) => ({
+  role: 'assistant',
+  content: streamState.fullContent,
+  timestamp: new Date().toISOString(),
+  metadata: {
+    contexts: streamState.contexts,
+    ...streamState.metadata
+  },
+  thinking_process: streamState.thinkingProcess,
+  tools_called: streamState.toolsCalled,
+  thinkingTimeMs,
+  showThinking: false,
+  showContexts: false
+})
+
+onUnmounted(() => {
+  clearThinkingTimer()
+})
 
 const hydrateMessages = async () => {
   const id = props.currentConversationId
@@ -410,6 +503,40 @@ const formatScore = (percentage) => {
   return (percentage / 100).toFixed(2)
 }
 
+const applySsePayload = (parsed, streamState) => {
+  if (parsed.content_replace != null) {
+    streamState.fullContent = parsed.content_replace
+    streamingContent.value = streamState.fullContent
+  } else if (parsed.content) {
+    streamState.fullContent += parsed.content
+    streamingContent.value = streamState.fullContent
+  }
+  if (parsed.contexts) {
+    streamState.contexts = parsed.contexts
+  }
+  if (parsed.thinking_process) {
+    streamState.thinkingProcess = parsed.thinking_process
+    streamThinking.value = parsed.thinking_process
+  }
+  if (parsed.tools_called) {
+    streamState.toolsCalled = parsed.tools_called
+  }
+  if (parsed.metadata) {
+    streamState.metadata = parsed.metadata
+  }
+  if (parsed.evaluation) {
+    streamState.metadata = { ...streamState.metadata, evaluation: parsed.evaluation }
+  }
+  if (parsed.error) {
+    throw new Error(parsed.error)
+  }
+}
+
+const askSample = (q) => {
+  inputMessage.value = q
+  sendMessage()
+}
+
 const sendMessage = async () => {
   if (!inputMessage.value.trim()) return
 
@@ -428,6 +555,8 @@ const sendMessage = async () => {
   inputMessage.value = ''
   loading.value = true
   streamingContent.value = ''
+  streamThinking.value = []
+  startThinkingTimer()
   await scrollToBottom()
 
   try {
@@ -460,11 +589,13 @@ const sendMessage = async () => {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    let fullContent = ''
-    let contexts = []
-    let thinkingProcess = []
-    let toolsCalled = []
-    let metadata = {}
+    const streamState = {
+      fullContent: '',
+      contexts: [],
+      thinkingProcess: [],
+      toolsCalled: [],
+      metadata: {}
+    }
     let isDone = false
 
     while (true) {
@@ -479,19 +610,8 @@ const sendMessage = async () => {
           const data = line.slice(6)
           if (data === '[DONE]') {
             isDone = true
-            messages.value.push({
-              role: 'assistant',
-              content: fullContent,
-              timestamp: new Date().toISOString(),
-              metadata: {
-                contexts: contexts,
-                ...metadata
-              },
-              thinking_process: thinkingProcess,
-              tools_called: toolsCalled,
-              showThinking: false,
-              showContexts: false
-            })
+            const thinkingTimeMs = captureThinkingTimeMs()
+            messages.value.push(buildAssistantMessage(streamState, thinkingTimeMs))
             emit('conversation-change', {
               conversationId: props.currentConversationId,
               messages: messages.value
@@ -499,25 +619,11 @@ const sendMessage = async () => {
           } else {
             try {
               const parsed = JSON.parse(data)
-              if (parsed.content) {
-                fullContent += parsed.content
-              }
-              if (parsed.contexts) {
-                contexts = parsed.contexts
-              }
-              if (parsed.thinking_process) {
-                thinkingProcess = parsed.thinking_process
-              }
-              if (parsed.tools_called) {
-                toolsCalled = parsed.tools_called
-              }
-              if (parsed.metadata) {
-                metadata = parsed.metadata
-              }
-              if (parsed.error) {
-                throw new Error(parsed.error)
-              }
+              applySsePayload(parsed, streamState)
             } catch (e) {
+              if (e.message && !String(e.message).includes('JSON')) {
+                throw e
+              }
               console.error('解析数据失败:', e)
             }
           }
@@ -525,20 +631,9 @@ const sendMessage = async () => {
       }
     }
     
-    if (!isDone && fullContent) {
-      messages.value.push({
-        role: 'assistant',
-        content: fullContent,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          contexts: contexts,
-          ...metadata
-        },
-        thinking_process: thinkingProcess,
-        tools_called: toolsCalled,
-        showThinking: false,
-        showContexts: false
-      })
+    if (!isDone && streamState.fullContent) {
+      const thinkingTimeMs = captureThinkingTimeMs()
+      messages.value.push(buildAssistantMessage(streamState, thinkingTimeMs))
       emit('conversation-change', {
         conversationId: props.currentConversationId,
         messages: messages.value
@@ -557,6 +652,9 @@ const sendMessage = async () => {
     })
   } finally {
     loading.value = false
+    streamingContent.value = ''
+    streamThinking.value = []
+    clearThinkingTimer()
     await scrollToBottom()
   }
 }
@@ -593,6 +691,9 @@ const regenerateResponse = async (index) => {
   })
 
   loading.value = true
+  streamingContent.value = ''
+  streamThinking.value = []
+  startThinkingTimer()
   await scrollToBottom()
 
   try {
@@ -624,11 +725,13 @@ const regenerateResponse = async (index) => {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    let fullContent = ''
-    let contexts = []
-    let thinkingProcess = []
-    let toolsCalled = []
-    let metadata = {}
+    const streamState = {
+      fullContent: '',
+      contexts: [],
+      thinkingProcess: [],
+      toolsCalled: [],
+      metadata: {}
+    }
     let isDone = false
 
     while (true) {
@@ -643,19 +746,8 @@ const regenerateResponse = async (index) => {
           const data = line.slice(6)
           if (data === '[DONE]') {
             isDone = true
-            messages.value.push({
-              role: 'assistant',
-              content: fullContent,
-              timestamp: new Date().toISOString(),
-              metadata: {
-                contexts: contexts,
-                ...metadata
-              },
-              thinking_process: thinkingProcess,
-              tools_called: toolsCalled,
-              showThinking: false,
-              showContexts: false
-            })
+            const thinkingTimeMs = captureThinkingTimeMs()
+            messages.value.push(buildAssistantMessage(streamState, thinkingTimeMs))
             emit('conversation-change', {
               conversationId: props.currentConversationId,
               messages: messages.value
@@ -663,25 +755,11 @@ const regenerateResponse = async (index) => {
           } else {
             try {
               const parsed = JSON.parse(data)
-              if (parsed.content) {
-                fullContent += parsed.content
-              }
-              if (parsed.contexts) {
-                contexts = parsed.contexts
-              }
-              if (parsed.thinking_process) {
-                thinkingProcess = parsed.thinking_process
-              }
-              if (parsed.tools_called) {
-                toolsCalled = parsed.tools_called
-              }
-              if (parsed.metadata) {
-                metadata = parsed.metadata
-              }
-              if (parsed.error) {
-                throw new Error(parsed.error)
-              }
+              applySsePayload(parsed, streamState)
             } catch (e) {
+              if (e.message && !String(e.message).includes('JSON')) {
+                throw e
+              }
               console.error('解析数据失败:', e)
             }
           }
@@ -696,6 +774,9 @@ const regenerateResponse = async (index) => {
     })
   } finally {
     loading.value = false
+    streamingContent.value = ''
+    streamThinking.value = []
+    clearThinkingTimer()
     await scrollToBottom()
   }
 }
@@ -1168,6 +1249,64 @@ const toggleFeedback = (messageIndex, type) => {
   font-style: italic;
 }
 
+.empty-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 16px;
+  max-width: 520px;
+}
+
+.sample-q-btn {
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  color: #7dd3fc !important;
+}
+
+.stream-thinking {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+.stream-thinking-step {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.stream-preview {
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.assistant-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thinking-time-active {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-family: var(--tech-font-mono);
+  font-size: 11px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.thinking-time-footer {
+  align-self: flex-start;
+  margin-top: 8px;
+  font-family: var(--tech-font-mono);
+  font-size: 11px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
 .input-container {
   flex-shrink: 0;
   padding: 10px 24px 24px;
@@ -1180,6 +1319,7 @@ const toggleFeedback = (messageIndex, type) => {
 }
 
 .composer-inner {
+  position: relative;
   max-width: 960px;
   margin: 0 auto;
   width: 100%;

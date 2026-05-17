@@ -38,6 +38,28 @@ retrieval_k = 5
 retrieval_fetch_k = 24
 use_mmr_retriever = True
 
+# 高级检索（Agent / 统一检索服务）
+agent_max_subtasks = int(os.getenv("AGENT_MAX_SUBTASKS", "4"))
+use_hyde = os.getenv("USE_HYDE", "true").lower() in ("1", "true", "yes")
+use_rerank = os.getenv("USE_RERANK", "true").lower() in ("1", "true", "yes")
+rerank_candidate_k = int(os.getenv("RERANK_CANDIDATE_K", "16"))
+use_ragas_in_agent = os.getenv("USE_RAGAS_IN_AGENT", "true").lower() in ("1", "true", "yes")
+ragas_faithfulness_threshold = float(os.getenv("RAGAS_FAITHFULNESS_THRESHOLD", "0.55"))
+ragas_answer_relevancy_threshold = float(os.getenv("RAGAS_ANSWER_THRESHOLD", "0.5"))
+agent_max_retrieval_attempts = int(os.getenv("AGENT_MAX_RETRIEVAL_ATTEMPTS", "2"))
+agent_retrieval_threshold = float(os.getenv("AGENT_RETRIEVAL_THRESHOLD", "0.6"))
+agent_answer_threshold = float(os.getenv("AGENT_ANSWER_THRESHOLD", "0.65"))
+# 并行：多路向量检索、HyDE/子任务 query 构建（ThreadPool）
+use_parallel_retrieval = os.getenv("USE_PARALLEL_RETRIEVAL", "true").lower() in ("1", "true", "yes")
+# 子任务是否再调 LLM 转写 query；false 时直接用子任务原文检索（更快）
+use_llm_subtask_query = os.getenv("USE_LLM_SUBTASK_QUERY", "false").lower() in ("1", "true", "yes")
+# Agent 内 LLM 检索/答案评估（默认关，避免 FAQ 类问题多 2 次 LLM）
+use_agent_retrieval_eval = os.getenv("USE_AGENT_RETRIEVAL_EVAL", "false").lower() in ("1", "true", "yes")
+use_agent_answer_eval = os.getenv("USE_AGENT_ANSWER_EVAL", "false").lower() in ("1", "true", "yes")
+
+# 星河科技演示语料目录
+sample_data_dir = os.path.join(RAG_DIR, "data")
+
 llm_api_key = os.getenv("ZHIPUAI_API_KEY") or os.getenv("OPENAI_API_KEY")
 openai_api_base = os.getenv("OPENAI_API_BASE", "https://open.bigmodel.cn/api/paas/v4")
 embedding_model_name = os.getenv("EMBEDDING_MODEL_NAME", "embedding-2")
@@ -60,6 +82,18 @@ database_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres
 jwt_secret_key = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
 jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")
 jwt_expire_minutes = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+
+# Redis（可选）：多实例共享 Agent 会话历史 + 检索片段短期缓存
+redis_url = os.getenv("REDIS_URL", "").strip()
+redis_key_prefix = (os.getenv("REDIS_KEY_PREFIX", "rag") or "rag").strip()
+redis_conversation_ttl_seconds = int(
+    os.getenv("REDIS_CONVERSATION_TTL_SECONDS", str(7 * 24 * 3600))
+)
+redis_retrieval_cache_ttl_seconds = int(os.getenv("RETRIEVAL_CACHE_TTL_SECONDS", "120"))
+redis_max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", "20"))
+redis_retrieval_cache_enabled = bool(redis_url) and os.getenv(
+    "RETRIEVAL_CACHE_ENABLED", "true"
+).lower() in ("1", "true", "yes")
 
 session_config = {
     "configurable": {
