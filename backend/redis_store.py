@@ -1,5 +1,5 @@
 """
-Redis：仅用于 (1) 多实例共享会话历史 (2) 检索结果短期缓存。
+Redis：用于 (1) 多实例共享会话历史 (2) 检索结果短期缓存。
 未配置 REDIS_URL 时会话回退进程内字典，检索不做缓存。
 """
 from __future__ import annotations

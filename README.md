@@ -2,7 +2,7 @@
 
 ## About
 
-以**售后 / 客服知识库问答**为典型场景的智能 RAG 演示：前端使用 Vue 3 + Element Plus 构建深色科技风聊天界面，后端使用 FastAPI 提供认证、文档入库、向量检索、流式问答、Agentic RAG 和回答质量评估。项目集成 PostgreSQL、ChromaDB、可选 **Redis**（Agent 会话共享与检索短期缓存）、LangChain、Embedding 模型、智谱 GLM / OpenAI-compatible API 与 RAGAS。仓库在 `backend/RAG/data` 附带 **星河科技 Nova 耳机 X1** 示例语料（用户手册、常见故障 FAQ、退换货政策、内部客服话术等），也可上传自有文档扩展为任意领域知识库，用于完整演示「文档入库 → 向量化检索 → 增强生成 → 质量评估」流程。
+以**售后 / 客服知识库问答**为典型场景的智能 RAG 演示：前端使用 Vue 3 + Element Plus 构建深色科技风聊天界面，后端使用 FastAPI 提供认证、文档入库、向量检索、流式问答、Agentic RAG 和回答质量评估。项目集成 PostgreSQL、ChromaDB、可选 HyDE：用 LLM 生成假设文档片段作扩展查询，环境变量 USE_HYDE 控制开关。可选 **Redis**（Agent 会话共享与检索短期缓存）、LangChain、Embedding 模型、智谱 GLM / OpenAI-compatible API 与 RAGAS。仓库在 `backend/RAG/data` 附带 **星河科技 Nova 耳机 X1** 示例语料（用户手册、常见故障 FAQ、退换货政策、内部客服话术等），也可上传自有文档扩展为任意领域知识库，用于完整演示「文档入库 → 向量化检索 → 增强生成 → 质量评估」流程。
 
 ## 功能特性
 
